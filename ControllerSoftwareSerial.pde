@@ -1,22 +1,29 @@
 import processing.serial.*;
 import java.awt.AWTException;
 import java.awt.Robot;
-import java.awt.Point;
 import java.awt.MouseInfo;
-import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.InputEvent;
 import javax.swing.KeyStroke;
+import java.awt.Point;
 
 Serial MyPort;
 // The COM Port to listen for incoming data
 String COM_PORT = "COM4";
 int BAUD_RATE = 115_200;
+//Robot robot;
+Robot robot;
 
 void setup() {
     // Create a new Serial object listening at COM_PORT with baudrate BAUD_RATE
     MyPort = new Serial(this, COM_PORT, BAUD_RATE);
     MyPort.bufferUntil('\n');
-    
+    //robot = new Robot();
+    try {
+      robot = new Robot();
+    } catch (AWTException e) {
+      e.printStackTrace();
+    }
     // Hide the window created. TODO: Remappable Buttons GUI
     //surface.setLocation(-200,-200);
     //surface.setVisible(false);
@@ -31,13 +38,12 @@ void serialEvent(Serial MyPort) throws Exception {
         // Split data into arrpwkeys, buttons, leftjoystick and rightjoystick
         String[] serialData = MyPort.readStringUntil('\n').split(":", 0);
       
-        // Create a new Robot object
-        Robot Arduino = new Robot();
-      
         // Call the respective functions that use the data to perform the actions
-        handleRightJoystick(Arduino, serialData);
-        handleLeftJoystick(Arduino, serialData);
-        pressButtons(Arduino, serialData[0] + serialData[1]);
+        handleRightJoystick(robot, serialData);
+        
+        pressButtons(robot, serialData[0] + serialData[1]);
+        
+        handleLeftJoystick(robot, serialData);
         
     } catch (RuntimeException e) {
         e.printStackTrace();
@@ -55,34 +61,35 @@ void setKeyAs(int key, boolean state, Robot r) {
 /**
 Matches a button byte and presses and release the correct buttons
 */
-void pressButtons(Robot Arduino, String KeyString) {
+void pressButtons(Robot robot, String KeyString) {
+    println(KeyString);
     // Look at each bit of the button byte and press or release according to bit value
     for (int i = 0; i < KeyString.length(); i++) {
         boolean On = KeyString.charAt(i) == '1';
         switch (i) {
             case 0:
-                setKeyAs(KeyEvent.VK_UP, On, Arduino);
+                setKeyAs(KeyEvent.VK_UP, On, robot);
                 break; 
             case 1:
-                setKeyAs(KeyEvent.VK_RIGHT, On, Arduino);
+                setKeyAs(KeyEvent.VK_RIGHT, On, robot);
                 break; 
             case 2:
-                setKeyAs(KeyEvent.VK_DOWN, On, Arduino);
+                setKeyAs(KeyEvent.VK_DOWN, On, robot);
                 break; 
             case 3:
-                setKeyAs(KeyEvent.VK_LEFT, On, Arduino);
+                setKeyAs(KeyEvent.VK_LEFT, On, robot);
                 break; 
             case 4:
-                setKeyAs(KeyEvent.VK_Z, On, Arduino);
+                setKeyAs(KeyEvent.VK_Z, On, robot);
                 break; 
             case 5:
-                setKeyAs(KeyEvent.VK_X, On, Arduino);
+                setKeyAs(KeyEvent.VK_X, On, robot);
                 break; 
             case 6:
-                setKeyAs(KeyEvent.VK_C, On, Arduino);
+                setKeyAs(KeyEvent.VK_C, On, robot);
                 break; 
             case 7:
-                setKeyAs(KeyEvent.VK_V, On, Arduino);
+                setKeyAs(KeyEvent.VK_V, On, robot);
                 break; 
         }
     }
@@ -91,59 +98,57 @@ void pressButtons(Robot Arduino, String KeyString) {
 /**
 Simulates mouse movement from incoming data of a joystick
 */
-void handleLeftJoystick(Robot Arduino, String[] serialData) {
+void handleRightJoystick(Robot robot, String[] serialData) {
     // Get x, y and switchPressed
-    String[] leftAnalogValues = serialData[2].split("\\|", 0);
+    String[] leftAnalogValues = serialData[3].split("\\|", 0);
     
     // Parse the x and y values, and invert their signs
     int ly = (Integer.parseInt(leftAnalogValues[0])) * -1;
     int lx = (Integer.parseInt(leftAnalogValues[1])) * -1;
-    // convert string switchpressed value to boolean
-    boolean leftSwitchPressed = leftAnalogValues[2] == "1";
+    // convert string switchpressed value to booleanee
     
-    // Get the current x, y location of the mouse 
+    boolean rightSwitchPressed = leftAnalogValues[2].trim().substring(0, 1).equals("1");
+    
+    // Get the curreeent x, y location of the mouse 
     Point mouse = MouseInfo.getPointerInfo().getLocation();
     int curX = mouse.x;
     int curY = mouse.y;
     
     // As long as the joystick was moved, move the mouse
-    if (lx != 0 || ly != 0) Arduino.mouseMove(curX + lx, curY - ly);
-    
+    if (lx != 0 || ly != 0) robot.mouseMove(curX + lx, curY - ly);
+
     // Press or release left mouse button. NOTE: Broken
-    if (leftSwitchPressed) Arduino.mousePress(InputEvent.BUTTON1_DOWN_MASK);
-    else Arduino.mouseRelease(InputEvent.BUTTON1_DOWN_MASK);
+    setKeyAs(KeyEvent.VK_E, rightSwitchPressed, robot);
 }
 
 /**
 Simulates a dpad from incoming data from right joystick
 */
-void handleRightJoystick(Robot Arduino, String[] serialData) {
+void handleLeftJoystick(Robot robot, String[] serialData) {
     // Split data into x, y and switchpressed
-    String[] rightAnalogValues = serialData[3].split("\\|", 0);
+    String[] rightAnalogValues = serialData[2].split("\\|", 0);
     
     // invert signs and parse to int
     int ry = (Integer.parseInt(rightAnalogValues[0])) * -1;
     int rx = (Integer.parseInt(rightAnalogValues[1])) * -1;
+    
     // convert to bool
-    boolean rightSwitchPressed = rightAnalogValues[2] == "1";
+    boolean leftSwitchPressed = rightAnalogValues[2].equals("1");
+    boolean onRight = rx > 0;
     
     // As long as joystick was moved...
-    if (rx != 0 || ry != 0) {
+    if ((rx != 0 || ry != 0)) {
         // Convert analog value to digital and press or release arrow keys
-        if (rx > 0) Arduino.keyPress(KeyEvent.VK_RIGHT);
-        else Arduino.keyRelease(KeyEvent.VK_RIGHT);
-      
-        if (rx < 0) Arduino.keyPress(KeyEvent.VK_LEFT);
-        else Arduino.keyRelease(KeyEvent.VK_LEFT);
-      
-        if (ry > 0) Arduino.keyPress(KeyEvent.VK_UP);
-        else Arduino.keyRelease(KeyEvent.VK_UP);
-      
-        if (ry < 0) Arduino.keyPress(KeyEvent.VK_DOWN);
-        else Arduino.keyRelease(KeyEvent.VK_DOWN);
+        if (rx > 0) { setKeyAs(KeyEvent.VK_RIGHT, rx > 0, robot); }
+        if (rx < 0) { setKeyAs(KeyEvent.VK_LEFT, rx < 0, robot); }
+        if (ry > 0) { setKeyAs(KeyEvent.VK_UP, ry > 0, robot); }
+        if (ry < 0) { setKeyAs(KeyEvent.VK_DOWN, ry < 0, robot); }
+        //setKeyAs(KeyEvent.VK_RIGHT, rx > 0, robot);
+        //setKeyAs(KeyEvent.VK_LEFT, rx < 0, robot);
+        //setKeyAs(KeyEvent.VK_UP, ry > 0, robot);
+        //setKeyAs(KeyEvent.VK_DOWN, ry < 0, robot);
     }
  
     // Press or release right mouse button. NOTE: Broken
-    if (rightSwitchPressed) Arduino.mousePress(InputEvent.BUTTON2_DOWN_MASK);
-    else Arduino.mouseRelease(InputEvent.BUTTON2_DOWN_MASK);
+    setKeyAs(KeyEvent.VK_Q, leftSwitchPressed, robot);
 }
